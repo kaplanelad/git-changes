@@ -1,4 +1,4 @@
-# pr-changes
+# git-changes
 
 A Rust library and CLI tool designed to detect and process file changes in Git repositories, optimized for CI/CD environments like GitHub Actions and GitLab CI.
 
