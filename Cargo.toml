@@ -3,7 +3,7 @@ name = "git-changes"
 version = "0.1.0"
 edition = "2021"
 description = "A CLI tool to detect and process file changes in Git repositories for CI environments"
-authors = ["Your Name <your.email@example.com>"]
+authors = ["Elad Kaplan <kaplan.elad@gmail.com>"]
 license = "MIT"
 
 [lib]
