@@ -1,0 +1,67 @@
+name: Sanity Check
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  sanity-check:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Build binary
+        run: cargo build --release --all-features
+
+      - name: Determine binary path
+        id: binary_info
+        shell: bash
+        run: |
+          BINARY_PATH="./target/release/git-changes"
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            BINARY_PATH="${BINARY_PATH}.exe"
+          fi
+          echo "binary_path=${BINARY_PATH}" >> $GITHUB_OUTPUT
+
+      - name: List changes
+        shell: bash
+        run: |
+          BRANCH_NAME="${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}"
+          ${{ steps.binary_info.outputs.binary_path }} --repo . --branch "$BRANCH_NAME"
+
+      - name: Export changes
+        shell: bash
+        run: |
+          mkdir -p ./changes_output
+          BRANCH_NAME="${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}"
+          ${{ steps.binary_info.outputs.binary_path }} --repo . --branch "$BRANCH_NAME" --output-dir ./changes_output
+
+          echo "📁 Contents of changes_output directory:"
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            # Windows: Use PowerShell to list directory recursively
+            powershell -Command "Get-ChildItem -Path ./changes_output -Recurse | Select-Object FullName"
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            # macOS: Use find command
+            find ./changes_output -type f -o -type d | sort
+          else
+            # Linux: Use tree if available, otherwise use find
+            if command -v tree &> /dev/null; then
+              tree ./changes_output
+            else
+              find ./changes_output -type f -o -type d | sort
+            fi
+          fi
