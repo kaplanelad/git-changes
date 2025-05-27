@@ -104,6 +104,7 @@ impl Git for GitCli {
         debug!(url = %url, target_dir = %self.repo_path.display(), "Cloning repository");
         let output = Command::new("git")
             .args(["clone", url, &self.repo_path.to_string_lossy()])
+            .current_dir(std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/")))
             .output()
             .map_err(|e| Error::GitCommandError(e.to_string()))?;
 
