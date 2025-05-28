@@ -284,9 +284,22 @@ impl GitChangesProcessor {
     fn get_changes_for_commits(&self, commit_hash: &str) -> Result<HashMap<String, FileChange>> {
         debug!("Retrieving changes for commit");
 
-        // First fetch the commit to ensure it's available
-        self.git
-            .run_git_command(&["fetch", "origin", commit_hash])?;
+        // Check if the commit exists locally first
+        let commit_exists = self
+            .git
+            .run_git_command(&["cat-file", "-e", commit_hash])
+            .is_ok();
+
+        // Only fetch if the commit doesn't exist locally
+        if !commit_exists {
+            debug!("Commit not found locally, attempting to fetch");
+            self.git
+                .run_git_command(&["fetch", "origin", commit_hash])
+                .map_err(|e| {
+                    debug!(error = %e, "Failed to fetch commit, will try to use local commit");
+                    e
+                })?;
+        }
 
         let mut all_changes = HashMap::new();
         let parent_commit = format!("{commit_hash}^");
