@@ -1,23 +1,15 @@
 use clap::{ArgGroup, Parser};
 use git_changes::{self, FileStatus};
 use std::path::PathBuf;
-use tracing::{debug, level_filters::LevelFilter};
+use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{fmt, EnvFilter};
-
-fn parse_commit(s: &str) -> std::result::Result<String, String> {
-    if s.trim().is_empty() {
-        Err("Commit hash cannot be empty".to_string())
-    } else {
-        Ok(s.trim().to_string())
-    }
-}
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 #[command(group(
     ArgGroup::new("target")
         .required(true)
-        .args(["branch", "commits"]),
+        .args(["branch", "commit"]),
 ))]
 struct Cli {
     /// Git repository (HTTPS/SSH URL or local path)
@@ -32,9 +24,9 @@ struct Cli {
     #[arg(short = 't', long)]
     target_branch: Option<String>,
 
-    /// Comma-separated list of commits to analyze
-    #[arg(short, long, group = "target", value_delimiter = ',', value_parser = parse_commit)]
-    commits: Option<Vec<String>>,
+    /// Commit to analyze
+    #[arg(short, long, group = "target")]
+    commit: Option<String>,
 
     /// Output directory for changes (if not provided, only lists changes)
     #[arg(short, long)]
@@ -106,22 +98,30 @@ async fn main() -> git_changes::Result<()> {
         .pretty()
         .init();
 
-    let processor = git_changes::new(&cli.repo, cli.target_branch.as_deref())?;
+    let processor = git_changes::new(&cli.repo)?;
 
-    let target = if let Some(branch) = cli.branch {
-        processor.analyze_branch(&branch)?
-    } else if let Some(commits) = cli.commits {
-        processor.analyze_commits(&commits)
+    let changes = if let Some(output_dir) = &cli.output_dir {
+        if let Some(branch) = cli.branch {
+            if let Some(target_branch) = &cli.target_branch {
+                processor.export_branch_changes(&branch, target_branch, output_dir)?
+            } else {
+                processor.export_changes_from_default_branch(&branch, output_dir)?
+            }
+        } else if let Some(commit) = cli.commit {
+            processor.export_commit_changes(&commit, output_dir)?
+        } else {
+            unreachable!("ArgGroup ensures exactly one target is provided")
+        }
+    } else if let Some(branch) = cli.branch {
+        if let Some(target_branch) = &cli.target_branch {
+            processor.list_branch_changes(&branch, target_branch)?
+        } else {
+            processor.list_changes_from_default_branch(&branch)?
+        }
+    } else if let Some(commit) = cli.commit {
+        processor.list_commit_changes(&commit)?
     } else {
         unreachable!("ArgGroup ensures exactly one target is provided")
-    };
-
-    let changes = if let Some(output_dir) = cli.output_dir {
-        debug!(output_dir = %output_dir.display(), "Exporting changes to directory");
-        processor.export_changes(&target, &output_dir)?
-    } else {
-        debug!("Listing changes without export");
-        processor.list_changes(&target)?
     };
 
     print_changes_summary(&changes);
